@@ -22,3 +22,5 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # TODO: drop once brand assets are merged into home-assistant/brands
+          ignore: brands

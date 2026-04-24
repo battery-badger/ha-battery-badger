@@ -9,5 +9,6 @@
   "iot_class": "cloud_polling",
   "integration_type": "service",
   "dependencies": ["http", "frontend"],
+  "after_dependencies": ["energy"],
   "requirements": []
 }
