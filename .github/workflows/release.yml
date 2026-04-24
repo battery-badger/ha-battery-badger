@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # HACS requires the manifest.json version to match the release tag
+      # (minus the leading "v"), so fail fast if they disagree.
+      - name: Verify manifest version matches tag
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          MANIFEST=$(jq -r .version custom_components/battery_badger/manifest.json)
+          if [ "$TAG" != "$MANIFEST" ]; then
+            echo "::error::tag '$TAG' does not match manifest.json version '$MANIFEST'"
+            exit 1
+          fi
+
+      # HACS zip_release expects the archive to contain the contents of the
+      # integration directory at its root (manifest.json at zip root, not
+      # custom_components/battery_badger/manifest.json).
+      - name: Build battery_badger.zip
+        working-directory: custom_components/battery_badger
+        run: zip -r "${GITHUB_WORKSPACE}/battery_badger.zip" .
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: battery_badger.zip
