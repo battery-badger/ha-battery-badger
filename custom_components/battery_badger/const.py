@@ -15,7 +15,7 @@ CONF_CONSUMPTION_ENTITIES: Final = "consumption_entities"
 CONF_SOLAR_ENTITIES: Final = "solar_entities"
 CONF_INVERTER_CONTROL_ENTITY: Final = "inverter_control_entity"
 
-DEFAULT_SERVER_URL: Final = "http://localhost:3000"
+DEFAULT_SERVER_URL: Final = "https://batterybadger.com"
 
 # Hex values mirror ui/components/calculator.js ACTION_CONFIG.
 ACTION_COLORS: Final = {
