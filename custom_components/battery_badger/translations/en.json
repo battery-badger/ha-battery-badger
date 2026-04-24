@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Battery Badger server",
-        "description": "Point Home Assistant at your Battery Badger server and paste an API token generated at /account/tokens on the server.",
+        "description": "Connect this Home Assistant to your Battery Badger server. Enter the server URL (e.g. `https://batterybadger.com`) and a long-lived API token generated at `/account/tokens` on the server. Home Assistant will call the server immediately to verify the token and list the installations on your account; the token is stored in Home Assistant's encrypted config entry and only sent back to this same server.",
         "data": {
           "server_url": "Server URL",
           "api_token": "API token"
@@ -11,13 +11,14 @@
       },
       "installation": {
         "title": "Pick installation",
+        "description": "A Battery Badger account can own more than one installation — one per home, or a dedicated one for testing. Each Home Assistant config entry drives exactly one installation, so pick the one this Home Assistant should manage. Every reading posted from here, and every mode change applied to your inverter, will belong to the chosen installation. You can add another config entry later to drive a different installation from the same Home Assistant.",
         "data": {
           "installation_id": "Installation"
         }
       },
       "entities": {
         "title": "Home Assistant entities",
-        "description": "Which entities should the plugin read telemetry from, and which should it drive to change battery mode? Defaults are pre-filled from the Energy dashboard where possible.",
+        "description": "Battery Badger needs read access to a few telemetry entities and write access to an inverter control entity. Every half hour the plugin posts a reading (state of charge, household usage in Wh, solar generation in Wh) and fetches a 12-hour schedule; on each `:00` / `:30` boundary it calls `select_option` on the control entity with `CHARGE`, `HOLD` or `DISCHARGE`. Pick a **state-of-charge sensor** (unit `%`, `device_class: battery`), one or more **cumulative energy sensors** for household consumption and solar generation (kWh or Wh — multiple entries are summed), and a `select` or `input_select` with `CHARGE` / `HOLD` / `DISCHARGE` as options. Defaults for SOC and energy are pre-filled from your Energy dashboard where possible; you can edit them later under *Configure*.",
         "data": {
           "soc_entity": "State of charge (%)",
           "consumption_entities": "Household consumption (cumulative kWh; multiple allowed, summed)",
@@ -39,6 +40,7 @@
     "step": {
       "init": {
         "title": "Edit entity selections",
+        "description": "Re-pick the entities this integration reads from and drives. Defaults show what's currently stored in the config entry. The server URL and API token aren't editable here — remove the config entry and re-add if you need to change either.",
         "data": {
           "soc_entity": "State of charge (%)",
           "consumption_entities": "Household consumption (cumulative kWh)",
