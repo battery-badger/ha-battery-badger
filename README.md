@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brands/icon.svg" alt="Battery Badger" width="128" height="128" />
+  <img src="custom_components/battery_badger/brand/icon.svg" alt="Battery Badger" width="128" height="128" />
 </p>
 
 # Battery Badger — Home Assistant integration

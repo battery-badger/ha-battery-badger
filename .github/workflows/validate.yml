@@ -22,6 +22,8 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # TODO: drop once brand assets are merged into home-assistant/brands.
-          # Icons are staged in brands/ — see brands/README.md for the submission steps.
+          # Brand icons ship in-repo at custom_components/battery_badger/brand/
+          # (HA 2026.3+ Brands Proxy API). home-assistant/brands no longer
+          # accepts PRs for custom integrations, so the HACS brands check is
+          # skipped here.
           ignore: brands
