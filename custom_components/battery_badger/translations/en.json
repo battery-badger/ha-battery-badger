@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Battery Badger server",
+        "description": "Point Home Assistant at your Battery Badger server and paste an API token generated at /account/tokens on the server.",
+        "data": {
+          "server_url": "Server URL",
+          "api_token": "API token"
+        }
+      },
+      "installation": {
+        "title": "Pick installation",
+        "data": {
+          "installation_id": "Installation"
+        }
+      },
+      "entities": {
+        "title": "Home Assistant entities",
+        "description": "Which entities should the plugin read telemetry from, and which should it drive to change battery mode? Defaults are pre-filled from the Energy dashboard where possible.",
+        "data": {
+          "soc_entity": "State of charge (%)",
+          "consumption_entities": "Household consumption (cumulative kWh; multiple allowed, summed)",
+          "solar_entities": "Solar generation (cumulative kWh; multiple allowed, summed)",
+          "inverter_control_entity": "Inverter control entity (select: CHARGE/HOLD/DISCHARGE)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API token.",
+      "cannot_connect": "Can't reach the server. Check the URL and that Battery Badger is running.",
+      "no_installations": "This account has no installations yet. Create one on the web dashboard first."
+    },
+    "abort": {
+      "already_configured": "This installation is already configured in Home Assistant."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Edit entity selections",
+        "data": {
+          "soc_entity": "State of charge (%)",
+          "consumption_entities": "Household consumption (cumulative kWh)",
+          "solar_entities": "Solar generation (cumulative kWh)",
+          "inverter_control_entity": "Inverter control entity"
+        }
+      }
+    }
+  }
+}
