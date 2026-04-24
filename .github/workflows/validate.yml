@@ -22,5 +22,6 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # TODO: drop once brand assets are merged into home-assistant/brands
+          # TODO: drop once brand assets are merged into home-assistant/brands.
+          # Icons are staged in brands/ — see brands/README.md for the submission steps.
           ignore: brands

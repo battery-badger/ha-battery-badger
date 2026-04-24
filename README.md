@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brands/icon-128.png" alt="Battery Badger" width="128" height="128" />
+</p>
+
 # Battery Badger — Home Assistant integration
 
 [![hacs][hacs-badge]][hacs]
