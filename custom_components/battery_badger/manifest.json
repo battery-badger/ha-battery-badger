@@ -1,14 +1,14 @@
 {
   "domain": "battery_badger",
   "name": "Battery Badger",
-  "version": "0.1.0",
-  "documentation": "https://github.com/battery-badger/ha-battery-badger",
-  "issue_tracker": "https://github.com/battery-badger/ha-battery-badger/issues",
+  "after_dependencies": ["energy"],
   "codeowners": ["@damianmoore"],
   "config_flow": true,
-  "iot_class": "cloud_polling",
-  "integration_type": "service",
   "dependencies": ["http", "frontend"],
-  "after_dependencies": ["energy"],
-  "requirements": []
+  "documentation": "https://github.com/battery-badger/ha-battery-badger",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/battery-badger/ha-battery-badger/issues",
+  "requirements": [],
+  "version": "0.1.0"
 }
