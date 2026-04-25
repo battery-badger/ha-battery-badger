@@ -173,4 +173,8 @@ class ScheduleSensor(_Base):
             "segments": self.coordinator.data.get("schedule") or [],
             "applied_mode": self.coordinator.data.get("applied_mode"),
             "last_schedule_fetch": self.coordinator.data.get("last_schedule_fetch"),
+            "control_switch": self.coordinator.control_switch_entity_id,
+            "telemetry_switch": self.coordinator.telemetry_switch_entity_id,
+            "control_enabled": self.coordinator.control_enabled,
+            "telemetry_enabled": self.coordinator.telemetry_enabled,
         }

@@ -36,7 +36,7 @@ MODE_MAP: Final = {
     "EXPORT": "HOLD",
 }
 
-PLATFORMS: Final = ["sensor"]
+PLATFORMS: Final = ["sensor", "switch"]
 
 # URL path for the Lovelace card the integration ships with.
 CARD_URL: Final = "/battery_badger_static/battery-badger-card.js"

@@ -106,6 +106,10 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
         self._installation_id = int(entry.data[CONF_INSTALLATION_ID])
         self._reading_unsub = None
         self._apply_unsub = None
+        self.control_enabled: bool = True
+        self.telemetry_enabled: bool = True
+        self.control_switch_entity_id: str | None = None
+        self.telemetry_switch_entity_id: str | None = None
         self.data = {
             "schedule": [],
             "applied_mode": None,
@@ -113,6 +117,14 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             "last_schedule_fetch": None,
             "last_error": None,
         }
+
+    def set_control_enabled(self, value: bool) -> None:
+        self.control_enabled = bool(value)
+        self.async_set_updated_data(self.data)
+
+    def set_telemetry_enabled(self, value: bool) -> None:
+        self.telemetry_enabled = bool(value)
+        self.async_set_updated_data(self.data)
 
     async def async_start(self) -> None:
         """Schedule the first reading and mode-apply wakeups."""
@@ -151,7 +163,10 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
     async def _on_reading_tick(self, now: datetime) -> None:
         self._reading_unsub = None
         try:
-            await self._post_reading_and_fetch_schedule()
+            if not self.telemetry_enabled:
+                _LOGGER.debug("telemetry disabled; skipping reading POST + schedule fetch")
+            else:
+                await self._post_reading_and_fetch_schedule()
         except Exception as exc:  # noqa: BLE001
             _LOGGER.error("reading/schedule tick failed: %s", exc)
             self.data["last_error"] = str(exc)
@@ -249,6 +264,9 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             self.async_set_updated_data(self.data)
 
     async def _apply_current_mode(self, now: datetime) -> None:
+        if not self.control_enabled:
+            _LOGGER.debug("battery control disabled; skipping mode apply")
+            return
         segment = self._segment_at(now)
         if segment is None:
             _LOGGER.debug("no schedule segment covers %s; skipping mode apply", now)

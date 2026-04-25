@@ -56,6 +56,34 @@ class BatteryBadgerCard extends LitElement {
         color: var(--primary-color);
         text-decoration: none;
       }
+      .toggles {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--primary-text-color);
+      }
+      .toggle.disabled {
+        color: var(--secondary-text-color);
+      }
+      .body {
+        transition: opacity 200ms ease;
+      }
+      .body.faded {
+        opacity: 0.25;
+        pointer-events: none;
+      }
+      .control-paused {
+        font-size: 12px;
+        color: var(--warning-color, #b26a00);
+        margin-bottom: 8px;
+      }
       .current {
         display: flex;
         align-items: center;
@@ -119,6 +147,11 @@ class BatteryBadgerCard extends LitElement {
         font-size: 12px;
         margin-top: 8px;
       }
+      .telemetry-off-note {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        margin-top: 8px;
+      }
     `;
   }
 
@@ -133,6 +166,19 @@ class BatteryBadgerCard extends LitElement {
     return 3;
   }
 
+  _switchState(entityId) {
+    if (!entityId) return null;
+    const s = this.hass.states[entityId];
+    return s ? s.state === "on" : null;
+  }
+
+  _toggleSwitch(entityId, currentlyOn) {
+    if (!entityId) return;
+    this.hass.callService("switch", currentlyOn ? "turn_off" : "turn_on", {
+      entity_id: entityId,
+    });
+  }
+
   render() {
     if (!this.hass || !this.config) return html``;
     const state = this.hass.states[this.config.entity];
@@ -144,6 +190,11 @@ class BatteryBadgerCard extends LitElement {
 
     const segments = state.attributes.segments || [];
     const applied = state.attributes.applied_mode;
+    const controlSwitch = state.attributes.control_switch;
+    const telemetrySwitch = state.attributes.telemetry_switch;
+    const controlOn = this._switchState(controlSwitch);
+    const telemetryOn = this._switchState(telemetrySwitch);
+    const faded = telemetryOn === false;
 
     const now = new Date();
     const current = segments.find((s) => {
@@ -174,50 +225,97 @@ class BatteryBadgerCard extends LitElement {
             >Edit settings</a
           >
         </div>
-        <div class="current">
-          <span class="badge" style="background:${currentColor}"
-            >${currentLabel}</span
-          >
-          ${applied
-            ? html`<span class="applied"
-                >inverter set to <strong>${applied}</strong></span
-              >`
-            : html`<span class="applied">waiting for first mode apply…</span>`}
+        <div class="toggles">
+          ${controlSwitch
+            ? html`
+                <label
+                  class="toggle ${controlOn === false ? "disabled" : ""}"
+                  title="Let Battery Badger change the inverter mode"
+                >
+                  <ha-switch
+                    .checked=${controlOn === true}
+                    .disabled=${controlOn === null}
+                    @change=${() => this._toggleSwitch(controlSwitch, controlOn)}
+                  ></ha-switch>
+                  Battery control
+                </label>
+              `
+            : ""}
+          ${telemetrySwitch
+            ? html`
+                <label
+                  class="toggle ${telemetryOn === false ? "disabled" : ""}"
+                  title="Send readings to the Battery Badger server and fetch the schedule"
+                >
+                  <ha-switch
+                    .checked=${telemetryOn === true}
+                    .disabled=${telemetryOn === null}
+                    @change=${() =>
+                      this._toggleSwitch(telemetrySwitch, telemetryOn)}
+                  ></ha-switch>
+                  Telemetry
+                </label>
+              `
+            : ""}
         </div>
-        ${segments.length === 0
-          ? html`<div class="error">
-              No schedule yet — waiting for the next reading.
+        ${controlOn === false
+          ? html`<div class="control-paused">
+              Battery control paused — inverter mode won't change.
             </div>`
-          : html`
-              <div class="bar">
-                ${withDurations.map(
-                  (s) => html`
-                    <div
-                      class="seg"
-                      data-current=${s.isCurrent ? "1" : "0"}
-                      style="flex:${s.ms};background:${COLORS[s.action] ||
-                      "#999"}"
-                      title="${fmtTime(s.start)} – ${fmtTime(s.finish)} · ${s.action}"
-                    ></div>
-                  `
-                )}
-              </div>
-              <div class="ticks">
-                <span>${fmtTime(first.start)}</span>
-                <span>${fmtTime(mid.start)}</span>
-                <span>${fmtTime(last.finish)}</span>
-              </div>
-            `}
-        <div class="legend">
-          ${["CHARGE", "HOLD", "DISCHARGE", "EXPORT"].map(
-            (k) => html`
-              <span>
-                <span class="dot" style="background:${COLORS[k]}"></span
-                >${LABELS[k]}
-              </span>
-            `
-          )}
+          : ""}
+        <div class="body ${faded ? "faded" : ""}">
+          <div class="current">
+            <span class="badge" style="background:${currentColor}"
+              >${currentLabel}</span
+            >
+            ${applied
+              ? html`<span class="applied"
+                  >inverter set to <strong>${applied}</strong></span
+                >`
+              : html`<span class="applied"
+                  >waiting for first mode apply…</span
+                >`}
+          </div>
+          ${segments.length === 0
+            ? html`<div class="error">
+                No schedule yet — waiting for the next reading.
+              </div>`
+            : html`
+                <div class="bar">
+                  ${withDurations.map(
+                    (s) => html`
+                      <div
+                        class="seg"
+                        data-current=${s.isCurrent ? "1" : "0"}
+                        style="flex:${s.ms};background:${COLORS[s.action] ||
+                        "#999"}"
+                        title="${fmtTime(s.start)} – ${fmtTime(s.finish)} · ${s.action}"
+                      ></div>
+                    `
+                  )}
+                </div>
+                <div class="ticks">
+                  <span>${fmtTime(first.start)}</span>
+                  <span>${fmtTime(mid.start)}</span>
+                  <span>${fmtTime(last.finish)}</span>
+                </div>
+              `}
+          <div class="legend">
+            ${["CHARGE", "HOLD", "DISCHARGE", "EXPORT"].map(
+              (k) => html`
+                <span>
+                  <span class="dot" style="background:${COLORS[k]}"></span
+                  >${LABELS[k]}
+                </span>
+              `
+            )}
+          </div>
         </div>
+        ${faded
+          ? html`<div class="telemetry-off-note">
+              Telemetry off — not sending readings or fetching a new schedule.
+            </div>`
+          : ""}
       </ha-card>
     `;
   }
