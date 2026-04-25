@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Battery Badger server",
-        "description": "Connect this Home Assistant to your Battery Badger server. Enter the server URL (e.g. `https://batterybadger.com`) and a long-lived API token generated at `/account/tokens` on the server. Home Assistant will call the server immediately to verify the token and list the installations on your account; the token is stored in Home Assistant's encrypted config entry and only sent back to this same server.",
+        "description": "Connect this Home Assistant to your Battery Badger server. Enter the server URL (e.g. `{example_url}`) and a long-lived API token generated at `{tokens_path}` on the server. Home Assistant will call the server immediately to verify the token and list the installations on your account; the token is stored in Home Assistant's encrypted config entry and only sent back to this same server.",
         "data": {
           "server_url": "Server URL",
           "api_token": "API token"

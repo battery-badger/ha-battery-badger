@@ -135,6 +135,10 @@ class BatteryBadgerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
             }),
             errors=errors,
+            description_placeholders={
+                "example_url": DEFAULT_SERVER_URL,
+                "tokens_path": "/account/tokens",
+            },
         )
 
     async def async_step_installation(
