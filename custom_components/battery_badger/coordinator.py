@@ -87,6 +87,30 @@ def _kwh_to_wh(value: float, unit: str | None) -> int:
     return int(round(value * 1000))
 
 
+def _sum_energy_entities(
+    hass: HomeAssistant, entity_ids: list[str], *, kind: str
+) -> int:
+    """Sum cumulative-energy entities into Wh; raise if any isn't numeric.
+
+    ``kind`` ("consumption" / "solar") shows up in the error message so the
+    last_reading sensor's last_error attribute pinpoints which sensor the
+    integration is waiting on.
+    """
+    total = 0
+    for eid in entity_ids:
+        st = hass.states.get(eid)
+        if st is None:
+            raise BatteryBadgerApiError(f"{kind} entity {eid} unavailable")
+        try:
+            v = float(st.state)
+        except (ValueError, TypeError) as exc:
+            raise BatteryBadgerApiError(
+                f"{kind} entity {eid} has non-numeric state '{st.state}'"
+            ) from exc
+        total += _kwh_to_wh(v, st.attributes.get("unit_of_measurement"))
+    return total
+
+
 class BatteryBadgerCoordinator(DataUpdateCoordinator):
     """Coordinator: posts readings + fetches schedule + drives inverter mode."""
 
@@ -195,27 +219,16 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             ) from exc
         soc = max(0.0, min(100.0, soc))
 
-        usage_wh = 0
-        for eid in data.get(CONF_CONSUMPTION_ENTITIES, []):
-            st = self.hass.states.get(eid)
-            if st is None:
-                continue
-            try:
-                v = float(st.state)
-            except (ValueError, TypeError):
-                continue
-            usage_wh += _kwh_to_wh(v, st.attributes.get("unit_of_measurement"))
-
-        solar_wh = 0
-        for eid in data.get(CONF_SOLAR_ENTITIES, []):
-            st = self.hass.states.get(eid)
-            if st is None:
-                continue
-            try:
-                v = float(st.state)
-            except (ValueError, TypeError):
-                continue
-            solar_wh += _kwh_to_wh(v, st.attributes.get("unit_of_measurement"))
+        # Consumption / solar are cumulative counters — silently treating an
+        # unavailable sensor as zero produces a fake "drop to zero" reading
+        # followed by a huge spike when the real value comes back. Skip the
+        # whole post if any configured sensor isn't ready, like SOC does.
+        usage_wh = _sum_energy_entities(
+            self.hass, data.get(CONF_CONSUMPTION_ENTITIES, []), kind="consumption"
+        )
+        solar_wh = _sum_energy_entities(
+            self.hass, data.get(CONF_SOLAR_ENTITIES, []), kind="solar"
+        )
 
         # Snap taken_at to the expected half-hour slot (:25/:55 window → round
         # down to :00 or :30) so the server sees deterministic timestamps.

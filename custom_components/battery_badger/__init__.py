@@ -16,8 +16,10 @@ from .api import BatteryBadgerClient
 from .const import (
     CARD_URL,
     CONF_API_TOKEN,
+    CONF_CONSUMPTION_ENTITIES,
     CONF_SERVER_URL,
     CONF_SOC_ENTITY,
+    CONF_SOLAR_ENTITIES,
     DOMAIN,
     PLATFORMS,
 )
@@ -63,17 +65,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # not sufficient for MQTT-backed sensors, which take an extra moment
     # past startup to publish their first value.
     async def _initial_refresh(_event: object | None = None) -> None:
-        soc_entity = coordinator._config.get(CONF_SOC_ENTITY)
-        if soc_entity and not await _wait_for_numeric_state(
-            hass, soc_entity, _INITIAL_REFRESH_TIMEOUT_S
-        ):
-            _LOGGER.debug(
-                "SOC entity %s did not become numeric within %ss; deferring "
-                "initial refresh to next reading tick",
-                soc_entity,
-                _INITIAL_REFRESH_TIMEOUT_S,
+        cfg = coordinator._config
+        required: list[str] = []
+        soc_entity = cfg.get(CONF_SOC_ENTITY)
+        if soc_entity:
+            required.append(soc_entity)
+        required.extend(cfg.get(CONF_CONSUMPTION_ENTITIES, []) or [])
+        required.extend(cfg.get(CONF_SOLAR_ENTITIES, []) or [])
+
+        if required:
+            results = await asyncio.gather(
+                *(
+                    _wait_for_numeric_state(hass, eid, _INITIAL_REFRESH_TIMEOUT_S)
+                    for eid in required
+                )
             )
-            return
+            not_ready = [eid for eid, ok in zip(required, results) if not ok]
+            if not_ready:
+                _LOGGER.debug(
+                    "entities %s did not become numeric within %ss; deferring "
+                    "initial refresh to next reading tick",
+                    not_ready,
+                    _INITIAL_REFRESH_TIMEOUT_S,
+                )
+                return
         try:
             await coordinator.async_refresh_now()
         except Exception as exc:  # noqa: BLE001
