@@ -1,0 +1,7 @@
+refresh_now:
+  name: Refresh now
+  description: >
+    Post a reading and refetch the action schedule for every Battery Badger
+    installation, then push the result into the integration's sensors. Useful
+    after a reload or options change to seed the schedule without waiting for
+    the next HH:25 / HH:55 tick.

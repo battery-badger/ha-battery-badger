@@ -118,6 +118,13 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             "last_error": None,
         }
 
+    @property
+    def _config(self) -> dict[str, Any]:
+        # Options-flow edits are persisted into entry.options; merge so the
+        # latest user-picked entities win over the originals captured during
+        # the initial config flow.
+        return {**self._entry.data, **(self._entry.options or {})}
+
     def set_control_enabled(self, value: bool) -> None:
         self.control_enabled = bool(value)
         self.async_set_updated_data(self.data)
@@ -175,7 +182,7 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             self.async_set_updated_data(self.data)
 
     async def _post_reading_and_fetch_schedule(self) -> None:
-        data = self._entry.data
+        data = self._config
 
         soc_state = self.hass.states.get(data[CONF_SOC_ENTITY])
         if soc_state is None:
@@ -280,7 +287,7 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("mode already %s — no action", target_mode)
             return
 
-        control_entity = self._entry.data[CONF_INVERTER_CONTROL_ENTITY]
+        control_entity = self._config[CONF_INVERTER_CONTROL_ENTITY]
         domain = control_entity.split(".", 1)[0]
 
         if domain in ("select", "input_select"):
