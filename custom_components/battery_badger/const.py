@@ -19,10 +19,10 @@ DEFAULT_SERVER_URL: Final = "https://batterybadger.com"
 
 # Hex values mirror ui/components/calculator.js ACTION_CONFIG.
 ACTION_COLORS: Final = {
-    "CHARGE": "#1e6deb",
-    "HOLD": "#7a869f",
-    "DISCHARGE": "#e16914",
-    "EXPORT": "#662ced",
+    "CHARGE": "#34d399",
+    "HOLD": "#a1a1aa",
+    "DISCHARGE": "#fbbf24",
+    "EXPORT": "#c084fc",
 }
 
 # Server schedules can return EXPORT but most inverters in the field can't

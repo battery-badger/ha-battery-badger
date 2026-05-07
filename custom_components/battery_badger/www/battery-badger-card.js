@@ -7,10 +7,10 @@ import {
 } from "https://unpkg.com/lit-element@3.3.3/index.js?module";
 
 const COLORS = {
-  CHARGE: "#1e6deb",
-  HOLD: "#7a869f",
-  DISCHARGE: "#e16914",
-  EXPORT: "#662ced",
+  CHARGE: "#34d399",
+  HOLD: "#a1a1aa",
+  DISCHARGE: "#fbbf24",
+  EXPORT: "#c084fc",
 };
 
 const LABELS = {
