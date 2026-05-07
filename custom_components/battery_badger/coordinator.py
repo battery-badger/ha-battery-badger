@@ -230,11 +230,11 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             self.hass, data.get(CONF_SOLAR_ENTITIES, []), kind="solar"
         )
 
-        # Snap taken_at to the expected half-hour slot (:25/:55 window → round
-        # down to :00 or :30) so the server sees deterministic timestamps.
-        now = dt_util.utcnow().replace(second=0, microsecond=0)
-        minute = 0 if now.minute < 30 else 30
-        taken_at = now.replace(minute=minute)
+        # taken_at is the raw wall-clock at sample time. The server stores it
+        # as-is (microsecond precision); consumers (schedule, forecaster,
+        # dashboard chart, usage profile) bucket via half_hour_bucket() and
+        # pick MAX(taken_at) per bucket. Server enforces ±10 min skew.
+        taken_at = dt_util.utcnow()
 
         try:
             await self._client.post_reading(
@@ -244,8 +244,6 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
                 solar_wh=solar_wh,
                 battery_soc_percent=soc,
             )
-        except BatteryBadgerConflictError:
-            _LOGGER.debug("duplicate reading for %s — skipping", taken_at.isoformat())
         except BatteryBadgerAuthError:
             self._entry.async_start_reauth(self.hass)
             raise
