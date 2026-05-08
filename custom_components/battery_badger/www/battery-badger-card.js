@@ -31,9 +31,36 @@ function fmtTime(iso) {
   }
 }
 
+const HALF_HOUR_MS = 30 * 60 * 1000;
+
 class BatteryBadgerCard extends LitElement {
   static get properties() {
     return { hass: {}, config: {} };
+  }
+
+  // Force a re-render at the next HH:00 / HH:30 boundary so the highlighted
+  // "current" segment moves on without waiting for the coordinator to push a
+  // state update — when the action is identical across a boundary (HOLD→HOLD)
+  // HA dedupes the state and the card would otherwise stay frozen.
+  connectedCallback() {
+    super.connectedCallback();
+    this._armBoundaryTick();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._boundaryTimeout) {
+      clearTimeout(this._boundaryTimeout);
+      this._boundaryTimeout = null;
+    }
+  }
+
+  _armBoundaryTick() {
+    const ms = HALF_HOUR_MS - (Date.now() % HALF_HOUR_MS) + 250;
+    this._boundaryTimeout = setTimeout(() => {
+      this.requestUpdate();
+      this._armBoundaryTick();
+    }, ms);
   }
 
   static get styles() {
