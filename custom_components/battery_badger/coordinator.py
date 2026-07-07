@@ -77,14 +77,22 @@ def _state_value(hass: HomeAssistant, entity_id: str | None) -> float | None:
 def _kwh_to_wh(value: float, unit: str | None) -> int:
     """Normalise an energy sensor's value to integer Wh.
 
-    HA energy sensors usually report kWh; a few report Wh directly. We trust
-    the unit_of_measurement attribute when present and fall back to kWh
-    (the Energy dashboard's canonical unit).
+    Only converts units we positively recognise. Guessing kWh for a sensor
+    that actually reports Wh but has no unit_of_measurement attribute would
+    inflate every reading 1000× straight into the usage profile the trading
+    model plans against — a loud ValueError (surfaced via last_error) is the
+    only safe behaviour.
     """
-    if unit and unit.lower() == "wh":
+    if unit is None:
+        raise ValueError("missing unit_of_measurement")
+    normalised = unit.strip().lower()
+    if normalised == "wh":
         return int(round(value))
-    # default: treat as kWh
-    return int(round(value * 1000))
+    if normalised == "kwh":
+        return int(round(value * 1000))
+    if normalised == "mwh":
+        return int(round(value * 1_000_000))
+    raise ValueError(f"unrecognised energy unit '{unit}'")
 
 
 def _sum_energy_entities(
@@ -107,7 +115,10 @@ def _sum_energy_entities(
             raise BatteryBadgerApiError(
                 f"{kind} entity {eid} has non-numeric state '{st.state}'"
             ) from exc
-        total += _kwh_to_wh(v, st.attributes.get("unit_of_measurement"))
+        try:
+            total += _kwh_to_wh(v, st.attributes.get("unit_of_measurement"))
+        except ValueError as exc:
+            raise BatteryBadgerApiError(f"{kind} entity {eid}: {exc}") from exc
     return total
 
 
