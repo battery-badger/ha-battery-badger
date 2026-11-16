@@ -105,9 +105,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     else:
         # Cold boot: wait for the started event. The listener auto-removes
         # if the entry is unloaded before HA finishes starting.
-        entry.async_on_unload(
-            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _initial_refresh)
+        started = {"fired": False}
+
+        async def _on_started(event: object | None = None) -> None:
+            started["fired"] = True
+            await _initial_refresh(event)
+
+        unsub_started = hass.bus.async_listen_once(
+            EVENT_HOMEASSISTANT_STARTED, _on_started
         )
+
+        @callback
+        def _cancel_started_listener() -> None:
+            # A once-listener removes itself when it fires; removing it again
+            # raises ValueError("list.remove(x): x not in list").
+            if not started["fired"]:
+                unsub_started()
+
+        entry.async_on_unload(_cancel_started_listener)
     return True
 
 

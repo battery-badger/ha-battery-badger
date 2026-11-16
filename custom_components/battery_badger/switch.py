@@ -57,7 +57,8 @@ class ControlEnabledSwitch(_BaseSwitch):
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         initial = True if last is None else last.state == "on"
-        self.coordinator.set_control_enabled(initial)
+        # Restore, not a user toggle: must not trigger the control-off action.
+        self.coordinator.restore_control_enabled(initial)
         self.coordinator.control_switch_entity_id = self.entity_id
 
     @property

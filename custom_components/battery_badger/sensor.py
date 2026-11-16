@@ -66,6 +66,8 @@ class CurrentActionSensor(_Base):
             "segment_start": seg["start"] if seg else None,
             "segment_finish": seg["finish"] if seg else None,
             "applied_mode": self.coordinator.data.get("applied_mode"),
+            "mode_map": self.coordinator.mode_map,
+            "supported_actions": self.coordinator.supported_actions,
         }
 
     def _current_segment(self):
@@ -172,6 +174,8 @@ class ScheduleSensor(_Base):
         return {
             "segments": self.coordinator.data.get("schedule") or [],
             "applied_mode": self.coordinator.data.get("applied_mode"),
+            "mode_map": self.coordinator.mode_map,
+            "supported_actions": self.coordinator.supported_actions,
             "last_schedule_fetch": self.coordinator.data.get("last_schedule_fetch"),
             "control_switch": self.coordinator.control_switch_entity_id,
             "telemetry_switch": self.coordinator.telemetry_switch_entity_id,

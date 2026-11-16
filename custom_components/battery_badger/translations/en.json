@@ -18,16 +18,35 @@
       },
       "entities": {
         "title": "Home Assistant entities",
-        "description": "Battery Badger needs read access to a few telemetry entities and write access to an inverter control entity. Every half hour the plugin posts a reading (state of charge, household usage in Wh, solar generation in Wh) and fetches a 12-hour schedule; on each `:00` / `:30` boundary it calls `select_option` on the control entity with `CHARGE`, `HOLD` or `DISCHARGE`. Pick a **state-of-charge sensor** (unit `%`, `device_class: battery`), one or more **cumulative energy sensors** for household consumption and solar generation (kWh or Wh — multiple entries are summed), and a `select` or `input_select` with `CHARGE` / `HOLD` / `DISCHARGE` as options. Defaults for SOC and energy are pre-filled from your Energy dashboard where possible; you can edit them later under *Configure*.",
+        "description": "Battery Badger needs read access to a few telemetry entities and write access to an inverter control entity. Every half hour the plugin posts a reading (state of charge, household usage in Wh, solar generation in Wh) and fetches a 12-hour schedule; on each `:00` / `:30` boundary it calls `select_option` on the control entity with the option you map to the current action (confirmed on the next step). Pick a **state-of-charge sensor** (unit `%`, `device_class: battery`), one or more **cumulative energy sensors** for household consumption and solar generation (kWh or Wh — multiple entries are summed), and a `select` or `input_select` that sets the inverter mode. Defaults for SOC and energy are pre-filled from your Energy dashboard where possible; you can edit them later under *Configure*.",
         "data": {
           "soc_entity": "State of charge (%)",
           "consumption_entities": "Household consumption (cumulative kWh; multiple allowed, summed)",
           "solar_entities": "Solar generation (cumulative kWh; multiple allowed, summed)",
-          "inverter_control_entity": "Inverter control entity (select: CHARGE/HOLD/DISCHARGE)"
+          "inverter_control_entity": "Inverter control entity (select or input_select)"
+        }
+      },
+      "modes": {
+        "title": "Inverter modes",
+        "description": "Choose which option of `{entity}` Battery Badger should select for each action. Options with the same name are pre-selected; choose the rest. {note}",
+        "data": {
+          "charge": "Charge from grid",
+          "hold": "Hold (keep solar)",
+          "discharge": "Power the house",
+          "export": "Export to grid",
+          "control_off": "Control off"
+        },
+        "data_description": {
+          "charge": "Battery charges from the grid at full power.",
+          "hold": "Battery neither discharges nor charges from the grid; surplus solar is stored, then exported once full.",
+          "discharge": "Battery covers the household load; surplus solar is stored, then exported once full.",
+          "export": "Battery discharges at full power to the house and the grid.",
+          "control_off": "The option to select when Battery Badger control is switched off, handing the battery back to the inverter's own controller (typically an option called AUTO)."
         }
       }
     },
     "error": {
+      "choose_option": "Choose which of the inverter's options to use for this action.",
       "invalid_auth": "Invalid API token.",
       "cannot_connect": "Can't reach the server. Check the URL and that Battery Badger is running.",
       "no_installations": "This account has no installations yet. Create one on the web dashboard first."
@@ -37,15 +56,36 @@
     }
   },
   "options": {
+    "error": {
+      "choose_option": "Choose which of the inverter's options to use for this action."
+    },
     "step": {
       "init": {
         "title": "Edit entity selections",
-        "description": "Re-pick the entities this integration reads from and drives. Defaults show what's currently stored in the config entry. The server URL and API token aren't editable here — remove the config entry and re-add if you need to change either.",
+        "description": "Re-pick the entities this integration reads from and drives. Defaults show what's currently stored in the config entry. The server URL and API token aren't editable here — remove the config entry and re-add if you need to change either. The next step confirms which inverter option is used for each action.",
         "data": {
           "soc_entity": "State of charge (%)",
           "consumption_entities": "Household consumption (cumulative kWh)",
           "solar_entities": "Solar generation (cumulative kWh)",
           "inverter_control_entity": "Inverter control entity"
+        }
+      },
+      "modes": {
+        "title": "Inverter modes",
+        "description": "Choose which option of `{entity}` Battery Badger should select for each action. Options with the same name are pre-selected; choose the rest. {note}",
+        "data": {
+          "charge": "Charge from grid",
+          "hold": "Hold (keep solar)",
+          "discharge": "Power the house",
+          "export": "Export to grid",
+          "control_off": "Control off"
+        },
+        "data_description": {
+          "charge": "Battery charges from the grid at full power.",
+          "hold": "Battery neither discharges nor charges from the grid; surplus solar is stored, then exported once full.",
+          "discharge": "Battery covers the household load; surplus solar is stored, then exported once full.",
+          "export": "Battery discharges at full power to the house and the grid.",
+          "control_off": "The option to select when Battery Badger control is switched off, handing the battery back to the inverter's own controller (typically an option called AUTO)."
         }
       }
     }

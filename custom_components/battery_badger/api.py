@@ -97,7 +97,18 @@ class BatteryBadgerClient:
             "POST", f"/api/v1/installations/{installation_id}/readings/", json=payload
         )
 
-    async def get_action_schedule(self, installation_id: int) -> list[dict]:
+    async def get_action_schedule(
+        self, installation_id: int, supported_actions: list[str] | None = None
+    ) -> list[dict]:
+        # The body tells the server which actions the inverter can perform.
+        # Older servers ignore it; the response shape is unchanged.
+        body = (
+            {"supported_actions": list(supported_actions)}
+            if supported_actions is not None
+            else None
+        )
         return await self._request(
-            "POST", f"/api/v1/installations/{installation_id}/action-schedule/"
+            "POST",
+            f"/api/v1/installations/{installation_id}/action-schedule/",
+            json=body,
         )

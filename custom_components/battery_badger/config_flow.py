@@ -23,11 +23,21 @@ from .const import (
     CONF_INSTALLATION_ID,
     CONF_INSTALLATION_NAME,
     CONF_INVERTER_CONTROL_ENTITY,
+    CONF_MODE_MAP,
     CONF_SERVER_URL,
     CONF_SOC_ENTITY,
     CONF_SOLAR_ENTITIES,
     DEFAULT_SERVER_URL,
     DOMAIN,
+)
+from .modes import (
+    ACTIONS,
+    CHOOSE,
+    CONTROL_OFF,
+    clean_options,
+    form_mode_map,
+    mode_map_from_form,
+    unchosen_actions,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -99,6 +109,7 @@ class BatteryBadgerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._installations: list[dict] = []
         self._installation_id: int | None = None
         self._installation_name: str | None = None
+        self._entry_data: dict[str, Any] = {}
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
@@ -175,7 +186,7 @@ class BatteryBadgerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         if user_input is not None:
-            data = {
+            self._entry_data = {
                 CONF_SERVER_URL: self._server_url,
                 CONF_API_TOKEN: self._api_token,
                 CONF_INSTALLATION_ID: self._installation_id,
@@ -185,16 +196,37 @@ class BatteryBadgerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_SOLAR_ENTITIES: user_input[CONF_SOLAR_ENTITIES],
                 CONF_INVERTER_CONTROL_ENTITY: user_input[CONF_INVERTER_CONTROL_ENTITY],
             }
-            return self.async_create_entry(
-                title=f"Battery Badger — {self._installation_name}",
-                data=data,
-            )
+            return await self.async_step_modes()
 
         defaults = await _energy_defaults(self.hass)
         return self.async_show_form(
             step_id="entities",
             data_schema=_entities_schema(defaults),
         )
+
+    async def async_step_modes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        control_entity = self._entry_data[CONF_INVERTER_CONTROL_ENTITY]
+        if user_input is not None:
+            errors = _choice_errors(self.hass, control_entity, user_input)
+            if errors:
+                return _show_modes_form(
+                    self, control_entity, _reshow_map(user_input), errors
+                )
+            # Stored in the entry data here: the entry doesn't exist yet, and
+            # ``options=`` on async_create_entry isn't available on every
+            # supported HA version. The coordinator merges data + options and
+            # later edits land in options, which win.
+            data = {
+                **self._entry_data,
+                CONF_MODE_MAP: _mode_map_from_input(user_input),
+            }
+            return self.async_create_entry(
+                title=f"Battery Badger — {self._installation_name}",
+                data=data,
+            )
+        return _show_modes_form(self, control_entity, None)
 
     @staticmethod
     @callback
@@ -229,15 +261,178 @@ def _entities_schema(defaults: dict[str, Any]) -> vol.Schema:
     return vol.Schema(fields)
 
 
+NOT_SUPPORTED = "__not_supported__"
+DO_NOTHING = "__do_nothing__"
+
+
+def _control_entity_options(hass, entity_id: str | None) -> list[str] | None:
+    """The control entity's current options, or None if they can't be read."""
+    if not entity_id:
+        return None
+    state = hass.states.get(entity_id)
+    if state is None:
+        return None
+    return clean_options(state.attributes.get("options"))
+
+
+def _mode_map_from_input(user_input: dict[str, Any]) -> dict[str, Any]:
+    return mode_map_from_form(
+        user_input, not_supported=NOT_SUPPORTED, do_nothing=DO_NOTHING
+    )
+
+
+def _reshow_map(user_input: dict[str, Any]) -> dict[str, Any]:
+    """The user's submitted selections as a mapping to pre-fill a re-shown form.
+
+    Placeholders and sentinels become ``None`` (unchosen / not supported / do
+    nothing); real picks are kept.
+    """
+    result: dict[str, Any] = {}
+    for key in (*ACTIONS, CONTROL_OFF):
+        raw = user_input.get(key.lower())
+        if isinstance(raw, str):
+            raw = raw.strip()
+        result[key] = None if raw in (None, "", CHOOSE, NOT_SUPPORTED, DO_NOTHING) else raw
+    return result
+
+
+def _choice_errors(hass, control_entity: str, user_input: dict[str, Any]) -> dict[str, str]:
+    """Per-field errors for required actions still on the placeholder."""
+    if _control_entity_options(hass, control_entity) is None:
+        return {}  # free-text form: no placeholder
+    return {a.lower(): "choose_option" for a in unchosen_actions(user_input)}
+
+
+def _select(
+    choices: list[str],
+    extra: tuple[str, str] | None,
+    leading: tuple[str, str] | None = None,
+) -> selector.SelectSelector:
+    select_options = [{"value": o, "label": o} for o in choices]
+    if leading is not None:
+        select_options.insert(0, {"value": leading[0], "label": leading[1]})
+    if extra is not None:
+        select_options.append({"value": extra[0], "label": extra[1]})
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=select_options,
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
+
+
+def _modes_schema(
+    options: list[str] | None, mode_map: dict[str, Any]
+) -> vol.Schema:
+    """One field per action plus Control off.
+
+    With a readable option list each field is a dropdown of the entity's
+    options (plus "Not supported" / "Do nothing" where allowed); without one
+    the fields are free text so the step never blocks the user.
+    """
+    fields: dict[Any, Any] = {}
+    # (form key, mapping key, sentinel choice or None if a value is required)
+    rows = [
+        (a.lower(), a, (NOT_SUPPORTED, "Not supported") if a == "EXPORT" else None)
+        for a in ACTIONS
+    ]
+    rows.append((CONTROL_OFF.lower(), CONTROL_OFF, (DO_NOTHING, "Do nothing")))
+    for key, map_key, extra in rows:
+        current = mode_map.get(map_key)
+        if options is None:
+            if extra is not None:
+                # Optional free text: the frontend omits a cleared field, so
+                # use a suggested value (not a default) -- omitted means blank.
+                suggested = {"suggested_value": current} if current else None
+                fields[vol.Optional(key, description=suggested)] = selector.TextSelector()
+            else:
+                fields[vol.Required(key, default=current or "")] = selector.TextSelector()
+            continue
+        # Only the entity's real options are offered. A required action with
+        # no same-named option gets a leading placeholder as its default: a
+        # required dropdown with no default is rendered with its first option
+        # pre-selected, which would silently map the action to it.
+        choices = list(options)
+        leading = None
+        if current is not None and current in choices:
+            default: Any = current
+        elif current is None and extra is not None:
+            default = extra[0]
+        else:
+            leading = (CHOOSE, "Choose an option\u2026")
+            default = CHOOSE
+        fields[vol.Required(key, default=default)] = _select(choices, extra, leading)
+    return vol.Schema(fields)
+
+
+def _show_modes_form(
+    flow,
+    control_entity: str,
+    stored: dict[str, Any] | None,
+    errors: dict[str, str] | None = None,
+) -> FlowResult:
+    options = _control_entity_options(flow.hass, control_entity)
+    if options is None:
+        note = (
+            "Home Assistant could not read the option list of this entity "
+            "(it is missing or unavailable), so type the option names "
+            "exactly as the inverter expects them. Leave Export blank if the "
+            "inverter cannot export, and Control off blank to do nothing."
+        )
+    else:
+        note = ""
+    # Stored values that are not among the entity's options are re-defaulted;
+    # with no readable options the stored/legacy values are shown as-is.
+    mode_map = form_mode_map(stored, options)
+    return flow.async_show_form(
+        step_id="modes",
+        data_schema=_modes_schema(options, mode_map),
+        description_placeholders={"entity": control_entity, "note": note},
+        errors=errors or {},
+    )
+
+
 class OptionsFlow(config_entries.OptionsFlow):
     def __init__(self, entry: config_entries.ConfigEntry) -> None:
         self._entry = entry
+        self._pending: dict[str, Any] = {}
+
+    async def async_step_modes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        current = {**self._entry.data, **(self._entry.options or {})}
+        # The control entity picked in the previous step, which may differ
+        # from the stored one: list ITS options (stale stored values are
+        # re-defaulted by form_mode_map).
+        control_entity = self._pending.get(
+            CONF_INVERTER_CONTROL_ENTITY
+        ) or current.get(CONF_INVERTER_CONTROL_ENTITY)
+        if user_input is not None:
+            errors = _choice_errors(self.hass, control_entity, user_input)
+            if errors:
+                return _show_modes_form(
+                    self, control_entity, _reshow_map(user_input), errors
+                )
+            return self.async_create_entry(
+                title="",
+                data={**self._pending, CONF_MODE_MAP: _mode_map_from_input(user_input)},
+            )
+        # A different control entity means the stored mapping (including an
+        # explicit "Not supported" / "Do nothing") belongs to the old one:
+        # start from fresh defaults for the new entity.
+        stored = current.get(CONF_MODE_MAP)
+        if control_entity != current.get(CONF_INVERTER_CONTROL_ENTITY):
+            stored = None
+        return _show_modes_form(self, control_entity, stored)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            # Hold the entity picks and continue to the inverter modes step;
+            # the entry is only written once that step is submitted.
+            self._pending = dict(user_input)
+            return await self.async_step_modes()
 
         # Use current values as defaults.
         current = {**self._entry.data, **(self._entry.options or {})}

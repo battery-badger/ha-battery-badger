@@ -14,6 +14,8 @@ CONF_SOC_ENTITY: Final = "soc_entity"
 CONF_CONSUMPTION_ENTITIES: Final = "consumption_entities"
 CONF_SOLAR_ENTITIES: Final = "solar_entities"
 CONF_INVERTER_CONTROL_ENTITY: Final = "inverter_control_entity"
+# Per-installation action -> inverter option mapping, see modes.py.
+CONF_MODE_MAP: Final = "mode_map"
 
 DEFAULT_SERVER_URL: Final = "https://batterybadger.com"
 
@@ -23,17 +25,6 @@ ACTION_COLORS: Final = {
     "HOLD": "#a1a1aa",
     "DISCHARGE": "#fbbf24",
     "EXPORT": "#c084fc",
-}
-
-# Server schedules can return EXPORT but most inverters in the field can't
-# export. The plugin translates EXPORT -> HOLD before sending to the user's
-# inverter-control entity. Once export-capable inverters ship, flip this
-# to EXPORT or expose per-mode service templating.
-MODE_MAP: Final = {
-    "CHARGE": "CHARGE",
-    "HOLD": "HOLD",
-    "DISCHARGE": "DISCHARGE",
-    "EXPORT": "HOLD",
 }
 
 PLATFORMS: Final = ["sensor", "switch"]

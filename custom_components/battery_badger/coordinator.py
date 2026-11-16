@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import event as ha_event
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
@@ -23,10 +24,18 @@ from .const import (
     CONF_CONSUMPTION_ENTITIES,
     CONF_INSTALLATION_ID,
     CONF_INVERTER_CONTROL_ENTITY,
+    CONF_MODE_MAP,
     CONF_SOC_ENTITY,
     CONF_SOLAR_ENTITIES,
     DOMAIN,
-    MODE_MAP,
+)
+from .modes import (
+    ModeMap,
+    clean_options,
+    control_off_option,
+    resolve_mode_map,
+    supported_actions,
+    target_for,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -160,6 +169,39 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
         # the initial config flow.
         return {**self._entry.data, **(self._entry.options or {})}
 
+    @property
+    def mode_map(self) -> ModeMap:
+        """Effective action -> inverter option mapping.
+
+        Stored mapping if the user confirmed one, else defaults for the
+        control entity's current options, else the legacy map when the entity
+        is missing/unavailable (re-evaluated on every call, so it upgrades by
+        itself once the options appear).
+        """
+        cfg = self._config
+        options = None
+        entity_id = cfg.get(CONF_INVERTER_CONTROL_ENTITY)
+        if entity_id:
+            state = self.hass.states.get(entity_id)
+            if state is not None:
+                options = clean_options(state.attributes.get("options"))
+        return resolve_mode_map(cfg.get(CONF_MODE_MAP), options)
+
+    @property
+    def supported_actions(self) -> list[str]:
+        return supported_actions(self.mode_map)
+
+    def restore_control_enabled(self, value: bool) -> None:
+        """Set the control state from restored HA state, without side effects.
+
+        Deliberately bypasses the on->off / off->on transition handling in
+        ``set_control_enabled``: at startup, reload or restore nothing has
+        changed, so neither the Control-off option nor an immediate mode apply
+        may fire.
+        """
+        self.control_enabled = bool(value)
+        self.async_set_updated_data(self.data)
+
     def set_control_enabled(self, value: bool) -> None:
         new_value = bool(value)
         was_enabled = self.control_enabled
@@ -170,7 +212,15 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             # in _apply_current_mode can't short-circuit on a stale value
             # (e.g. user manually changed the inverter while control was off).
             self.data["applied_mode"] = None
-            self.hass.async_create_task(self._apply_current_mode(dt_util.utcnow()))
+            self.hass.async_create_task(self._apply_current_mode_logged(dt_util.utcnow()))
+        elif was_enabled and not new_value:
+            # Hand the battery back to the inverter's own controller — but
+            # only on a real on->off transition made while we were running.
+            # It must never fire at startup, on restore of an already-off
+            # switch, on reload, or when control was never on this session
+            # (those go through restore_control_enabled): selecting a mode
+            # then would yank a battery that someone else is controlling.
+            self.hass.async_create_task(self._apply_control_off())
         self.async_set_updated_data(self.data)
 
     def set_telemetry_enabled(self, value: bool) -> None:
@@ -276,7 +326,9 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
         }
 
         try:
-            segments = await self._client.get_action_schedule(self._installation_id)
+            segments = await self._client.get_action_schedule(
+                self._installation_id, self.supported_actions
+            )
         except BatteryBadgerConflictError as exc:
             _LOGGER.warning("schedule not yet available: %s", exc)
             return
@@ -294,12 +346,21 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
     async def _on_apply_tick(self, now: datetime) -> None:
         self._apply_unsub = None
         try:
-            await self._apply_current_mode(now)
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.error("mode-apply tick failed: %s", exc)
+            await self._apply_current_mode_logged(now)
         finally:
             self._schedule_next_apply()
             self.async_set_updated_data(self.data)
+
+    async def _apply_current_mode_logged(self, now: datetime) -> None:
+        """Apply the current mode, logging (never raising) any failure.
+
+        Shared by the half-hourly tick and the off->on toggle task, so a
+        failing ``select_option`` is always visible in the log.
+        """
+        try:
+            await self._apply_current_mode(now)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.error("mode apply failed: %s", exc)
 
     async def _apply_current_mode(self, now: datetime) -> None:
         if not self.control_enabled:
@@ -311,34 +372,67 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
             return
 
         action = segment["action"]
-        target_mode = MODE_MAP.get(action, "HOLD")
+        target_mode = target_for(action, self.mode_map)
         applied = self.data.get("applied_mode")
 
         if target_mode == applied:
             _LOGGER.debug("mode already %s — no action", target_mode)
             return
 
-        control_entity = self._config[CONF_INVERTER_CONTROL_ENTITY]
-        domain = control_entity.split(".", 1)[0]
-
-        if domain in ("select", "input_select"):
-            service = "select_option"
-            await self.hass.services.async_call(
-                domain,
-                service,
-                {"entity_id": control_entity, "option": target_mode},
-                blocking=True,
-            )
-        else:
-            _LOGGER.error(
-                "unsupported control entity domain %s for %s", domain, control_entity
-            )
+        if not await self._select_option(target_mode):
             return
 
         self.data["applied_mode"] = target_mode
         _LOGGER.info(
-            "set %s to %s (schedule said %s)", control_entity, target_mode, action
+            "set %s to %s (schedule said %s)",
+            self._config[CONF_INVERTER_CONTROL_ENTITY],
+            target_mode,
+            action,
         )
+
+    async def _apply_control_off(self) -> None:
+        """Select the Control-off option once, if one is mapped."""
+        option = control_off_option(self.mode_map)
+        if option is None:
+            _LOGGER.debug("no control-off option mapped; leaving the inverter as is")
+            return
+        try:
+            ok = await self._select_option(option, retried=False)
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.error("failed to select control-off option %s: %s", option, exc)
+            return
+        if ok:
+            self.data["applied_mode"] = option
+            _LOGGER.info("battery control off: set inverter to %s", option)
+            self.async_set_updated_data(self.data)
+
+    async def _select_option(self, option: str, *, retried: bool = True) -> bool:
+        control_entity = self._config[CONF_INVERTER_CONTROL_ENTITY]
+        domain = control_entity.split(".", 1)[0]
+        if domain not in ("select", "input_select"):
+            _LOGGER.error(
+                "unsupported control entity domain %s for %s", domain, control_entity
+            )
+            return False
+        state = self.hass.states.get(control_entity)
+        if state is None or state.state == STATE_UNAVAILABLE:
+            # HA only warns when selecting on a stateless entity and the call
+            # "succeeds"; don't record a mode that was never applied.
+            _LOGGER.warning(
+                "control entity %s is missing or unavailable; cannot select %s "
+                "%s",
+                control_entity,
+                option,
+                "(will retry on the next tick)" if retried else "(not retried)",
+            )
+            return False
+        await self.hass.services.async_call(
+            domain,
+            "select_option",
+            {"entity_id": control_entity, "option": option},
+            blocking=True,
+        )
+        return True
 
     def _segment_at(self, now: datetime) -> dict | None:
         for seg in self.data.get("schedule") or []:

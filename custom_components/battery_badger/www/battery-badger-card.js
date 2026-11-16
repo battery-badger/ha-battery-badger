@@ -13,11 +13,21 @@ const COLORS = {
   EXPORT: "#c084fc",
 };
 
+// Mirrors ACTION_LABELS / ACTION_DESCRIPTIONS in modes.py.
 const LABELS = {
-  CHARGE: "Charge",
-  HOLD: "Hold",
-  DISCHARGE: "Discharge",
-  EXPORT: "Export",
+  CHARGE: "Charge from grid",
+  HOLD: "Hold (keep solar)",
+  DISCHARGE: "Power the house",
+  EXPORT: "Export to grid",
+};
+
+const DESCRIPTIONS = {
+  CHARGE: "Battery charges from the grid at full power.",
+  HOLD:
+    "Battery neither discharges nor charges from the grid; surplus solar is stored, then exported once full.",
+  DISCHARGE:
+    "Battery covers the household load; surplus solar is stored, then exported once full.",
+  EXPORT: "Battery discharges at full power to the house and the grid.",
 };
 
 function fmtTime(iso) {
@@ -217,6 +227,7 @@ class BatteryBadgerCard extends LitElement {
 
     const allSegments = state.attributes.segments || [];
     const applied = state.attributes.applied_mode;
+    const supported = state.attributes.supported_actions;
     const controlSwitch = state.attributes.control_switch;
     const telemetrySwitch = state.attributes.telemetry_switch;
     const controlOn = this._switchState(controlSwitch);
@@ -240,6 +251,9 @@ class BatteryBadgerCard extends LitElement {
     const currentLabel = current
       ? LABELS[current.action] || current.action
       : "Unknown";
+
+    const currentUnsupported =
+      current && Array.isArray(supported) && !supported.includes(current.action);
 
     const withDurations = segments.map((s) => ({
       ...s,
@@ -299,12 +313,17 @@ class BatteryBadgerCard extends LitElement {
           : ""}
         <div class="body ${faded ? "faded" : ""}">
           <div class="current">
-            <span class="badge" style="background:${currentColor}"
+            <span
+              class="badge"
+              style="background:${currentColor}"
+              title=${current ? DESCRIPTIONS[current.action] || "" : ""}
               >${currentLabel}</span
             >
             ${applied
               ? html`<span class="applied"
-                  >inverter set to <strong>${applied}</strong></span
+                  >${currentUnsupported
+                    ? `${currentLabel} isn't supported by your inverter — `
+                    : ""}inverter set to <strong>${applied}</strong></span
                 >`
               : html`<span class="applied"
                   >waiting for first mode apply…</span
@@ -323,7 +342,8 @@ class BatteryBadgerCard extends LitElement {
                         data-current=${s.isCurrent ? "1" : "0"}
                         style="flex:${s.ms};background:${COLORS[s.action] ||
                         "#999"}"
-                        title="${fmtTime(s.start)} – ${fmtTime(s.finish)} · ${s.action}"
+                        title="${fmtTime(s.start)} – ${fmtTime(s.finish)} · ${LABELS[s.action] ||
+                        s.action}"
                       ></div>
                     `
                   )}
@@ -337,7 +357,7 @@ class BatteryBadgerCard extends LitElement {
           <div class="legend">
             ${["CHARGE", "HOLD", "DISCHARGE", "EXPORT"].map(
               (k) => html`
-                <span>
+                <span title=${DESCRIPTIONS[k]}>
                   <span class="dot" style="background:${COLORS[k]}"></span
                   >${LABELS[k]}
                 </span>
@@ -361,6 +381,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "battery-badger-card",
   name: "Battery Badger",
-  description: "Charge/Hold/Discharge/Export schedule bar with current mode",
+  description: "Charge/Hold/Power the house/Export schedule bar with current mode",
   preview: false,
 });
