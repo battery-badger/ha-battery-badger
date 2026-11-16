@@ -215,7 +215,7 @@ class BatteryBadgerCard extends LitElement {
       >`;
     }
 
-    const segments = state.attributes.segments || [];
+    const allSegments = state.attributes.segments || [];
     const applied = state.attributes.applied_mode;
     const controlSwitch = state.attributes.control_switch;
     const telemetrySwitch = state.attributes.telemetry_switch;
@@ -224,6 +224,13 @@ class BatteryBadgerCard extends LitElement {
     const faded = telemetryOn === false;
 
     const now = new Date();
+    // The server's schedule covers the whole half-hour window it was fetched
+    // in, so its first segment can already be in the past (e.g. a 12:25 fetch
+    // returns a 12:00-start window). Drop any segment that has fully elapsed so
+    // the bar always begins at the current half-hour period. The boundary tick
+    // re-renders every HH:00/HH:30, so this trim advances on its own without
+    // waiting for the next server refetch.
+    const segments = allSegments.filter((s) => new Date(s.finish) > now);
     const current = segments.find((s) => {
       const start = new Date(s.start);
       const finish = new Date(s.finish);

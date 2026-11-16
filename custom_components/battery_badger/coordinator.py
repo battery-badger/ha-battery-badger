@@ -161,7 +161,16 @@ class BatteryBadgerCoordinator(DataUpdateCoordinator):
         return {**self._entry.data, **(self._entry.options or {})}
 
     def set_control_enabled(self, value: bool) -> None:
-        self.control_enabled = bool(value)
+        new_value = bool(value)
+        was_enabled = self.control_enabled
+        self.control_enabled = new_value
+        if new_value and not was_enabled:
+            # Don't wait for the next HH:00 / HH:30 tick — apply the active
+            # segment now. Clear applied_mode first so the idempotent check
+            # in _apply_current_mode can't short-circuit on a stale value
+            # (e.g. user manually changed the inverter while control was off).
+            self.data["applied_mode"] = None
+            self.hass.async_create_task(self._apply_current_mode(dt_util.utcnow()))
         self.async_set_updated_data(self.data)
 
     def set_telemetry_enabled(self, value: bool) -> None:
